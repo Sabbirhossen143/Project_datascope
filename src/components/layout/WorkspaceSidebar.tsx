@@ -20,7 +20,7 @@ type WorkspaceUser = { name: string; role: "ADMIN" | "ANALYST" | "VIEWER" };
 
 const navigation = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
-  { label: "Data Explorer", href: "/", icon: Database },
+  { label: "Data Explorer", href: "/explorer", icon: Database },
   { label: "Dataset Library", href: "/datasets", icon: FolderKanban },
   { label: "Advanced Search", href: "/advanced-search", icon: Search },
   { label: "Analytics", href: "/analytics", icon: ChartNoAxesCombined },

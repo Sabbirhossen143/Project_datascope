@@ -858,7 +858,7 @@ export default function DashboardClient() {
     setSearchHistory([]);
     setSavedViewsOpen(false);
     setHistoryOpen(false);
-    router.replace(`/?datasetId=${encodeURIComponent(datasetId)}`, { scroll: false });
+    router.replace(`/explorer?datasetId=${encodeURIComponent(datasetId)}`, { scroll: false });
   }
 
   const activeSort = `${sortBy}:${sortOrder}`;
