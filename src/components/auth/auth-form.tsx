@@ -41,14 +41,10 @@ export function AuthForm({ mode }: AuthFormProps) {
         isRegister ? "/api/auth/register" : "/api/auth/login",
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
           body: JSON.stringify(
-            isRegister
-              ? { name, email, password }
-              : { email, password }
+            isRegister ? { name, email, password } : { email, password }
           ),
         }
       );
@@ -59,15 +55,26 @@ export function AuthForm({ mode }: AuthFormProps) {
         throw new Error(result.message || "Something went wrong.");
       }
 
-      // Read the authenticated user from the server session; do not trust a client-supplied role.
+      // Registration creates an account only. The user must sign in separately.
+      if (isRegister) {
+        toast.success("Account created successfully! Please sign in.");
+        router.replace("/login");
+        router.refresh();
+        return;
+      }
+
+      // Restore the authenticated user from the server session after login.
       const sessionResponse = await fetch("/api/auth/me", {
         method: "GET",
         credentials: "same-origin",
         cache: "no-store",
       });
       const sessionResult = await sessionResponse.json();
+
       if (!sessionResponse.ok) {
-        throw new Error(sessionResult.message || "Unable to load your account session.");
+        throw new Error(
+          sessionResult.message || "Unable to load your account session."
+        );
       }
 
       const user = sessionResult.user ?? sessionResult;
@@ -90,9 +97,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         })
       );
 
-      toast.success(
-        isRegister ? "Account created successfully!" : "Welcome back! Login successful."
-      );
+      toast.success("Welcome back! Login successful.");
       router.replace("/overview");
       router.refresh();
     } catch (err) {

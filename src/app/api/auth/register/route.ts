@@ -1,11 +1,10 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { createSessionToken, setSessionCookie } from "@/lib/auth";
+import { users, datasets, accessPermissions } from "@/db/schema";
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(150),
@@ -63,22 +62,32 @@ export async function POST(request: NextRequest) {
         role: users.role,
       });
 
-    const token = await createSessionToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // Give a newly registered Viewer read access to the default sample dataset.
+    const defaultDatasetId = "81f7f864-4784-4117-80c3-2401f923e78e";
+    const [defaultDataset] = await db
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(eq(datasets.id, defaultDatasetId))
+      .limit(1);
 
-    const response = NextResponse.json(
+    if (defaultDataset) {
+      await db.insert(accessPermissions).values({
+        userId: user.id,
+        datasetId: defaultDataset.id,
+        canRead: true,
+        canExport: false,
+      });
+    }
+
+    // Registration does not create a login session.
+    return NextResponse.json(
       {
         success: true,
-        message: "Account created successfully.",
+        message: "Account created successfully. Please sign in.",
         user,
       },
       { status: 201 }
     );
-
-    return setSessionCookie(response, token);
   } catch (error) {
     console.error("Registration error:", error);
 
