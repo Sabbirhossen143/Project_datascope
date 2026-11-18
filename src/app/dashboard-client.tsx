@@ -78,6 +78,7 @@ function PremiumDropdown({
   ariaLabel,
   icon: LeadingIcon,
   compact = false,
+  dropUp = false,
 }: {
   value: string;
   options: DropdownOption[];
@@ -85,6 +86,7 @@ function PremiumDropdown({
   ariaLabel: string;
   icon?: React.ComponentType<{ size?: number; className?: string }>;
   compact?: boolean;
+  dropUp?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -128,7 +130,9 @@ function PremiumDropdown({
         <div
           role="listbox"
           aria-label={ariaLabel}
-          className={`absolute right-0 top-[calc(100%+7px)] z-[90] max-h-64 w-full min-w-[180px] overflow-y-auto rounded-xl border border-[#E5E8DF] bg-white p-1.5 shadow-[0_14px_36px_rgba(20,47,40,0.16)] ring-1 ring-black/[0.025] animate-in fade-in zoom-in-95 duration-150`}
+          className={`absolute right-0 ${
+  dropUp ? "bottom-[calc(100%+7px)]" : "top-[calc(100%+7px)]"
+} z-[90] max-h-64 w-full min-w-[180px] overflow-y-auto rounded-xl border border-[#E5E8DF] bg-white p-1.5 shadow-[0_14px_36px_rgba(20,47,40,0.16)] ring-1 ring-black/[0.025] animate-in fade-in zoom-in-95 duration-150`}
         >
           {options.map((option) => {
             const active = option.value === value;
@@ -1785,12 +1789,13 @@ export default function DashboardClient() {
                 <div className="relative">
                   <div className="w-[112px]">
                     <PremiumDropdown
-                      ariaLabel="Rows per page"
-                      value={String(pageSize)}
-                      options={pageSizeOptions}
-                      onChange={(nextValue) => dispatch(setPageSize(Number(nextValue)))}
-                      compact
-                    />
+  ariaLabel="Rows per page"
+  value={String(pageSize)}
+  options={pageSizeOptions}
+  onChange={(nextValue) => dispatch(setPageSize(Number(nextValue)))}
+  compact
+  dropUp
+/>
                   </div>
                 </div>
               </div>

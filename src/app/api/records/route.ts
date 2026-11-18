@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+﻿
+import { NextRequest, NextResponse } from "next/server";
 import { requireRole } from "@/lib/permissions";
 import {
   and,
@@ -15,6 +16,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { datasetRecords, accessPermissions } from "@/db/schema";
 
+// Filter validation
 const filterSchema = z.array(
   z.object({
     field: z.enum([
@@ -44,6 +46,7 @@ const filterSchema = z.array(
   })
 ).max(10);
 
+// Allowed sortable database fields
 const sortableFields: Record<string, SQLWrapper> = {
   externalId: datasetRecords.externalId,
   createdAt: datasetRecords.createdAt,
@@ -56,13 +59,38 @@ const sortableFields: Record<string, SQLWrapper> = {
   orderDate: sql`${datasetRecords.data} ->> 'orderDate'`,
 };
 
-export async function GET(request: NextRequest) {
+// Multi-column sorting validation
+const multiSortSchema = z
+  .array(
+    z.object({
+      field: z.enum([
+        "externalId",
+        "createdAt",
+        "amount",
+        "quantity",
+        "customerName",
+        "product",
+        "status",
+        "region",
+        "orderDate",
+      ]),
+      direction: z.enum(["asc", "desc"]),
+    })
+  )
+  .min(1)
+  .max(5)
+  .refine(
+    (items) =>
+      new Set(items.map((item) => item.field)).size === items.length,
+    "Duplicate sort fields are not allowed."
+  );
 
+export async function GET(request: NextRequest) {
   const auth = await requireRole(["ADMIN", "ANALYST", "VIEWER"]);
 
-if (!auth.authorized) {
-  return auth.response;
-}
+  if (!auth.authorized) {
+    return auth.response;
+  }
 
   try {
     const params = request.nextUrl.searchParams;
@@ -71,42 +99,51 @@ if (!auth.authorized) {
     const page = Number(params.get("page") || 1);
     const pageSize = Number(params.get("pageSize") || 25);
     const search = (params.get("search") || "").trim();
-    const sortBy = params.get("sortBy") || "createdAt";
-    const sortOrder = params.get("sortOrder") || "desc";
 
-    // Validate query parameters.
+    // Legacy single-column sorting parameters
+    const legacySortBy = params.get("sortBy") || "createdAt";
+    const legacySortOrder = params.get("sortOrder") || "desc";
+
+    // New multi-column sorting parameter
+    const rawSorting = params.get("sorting");
+
+    // Validate dataset ID
     if (!z.string().uuid().safeParse(datasetId).success) {
       return NextResponse.json(
-        { success: false, message: "A valid datasetId is required." },
+        {
+          success: false,
+          message: "A valid datasetId is required.",
+        },
         { status: 400 }
       );
     }
 
-    // Check dataset access permission.
-if (auth.session.role !== "ADMIN") {
-  const permission = await db
-    .select({ canRead: accessPermissions.canRead })
-    .from(accessPermissions)
-    .where(
-      and(
-        eq(accessPermissions.userId, auth.session.userId),
-        eq(accessPermissions.datasetId, datasetId!),
-        eq(accessPermissions.canRead, true)
-      )
-    )
-    .limit(1);
+    // Check dataset access permission
+    if (auth.session.role !== "ADMIN") {
+      const permission = await db
+        .select({ canRead: accessPermissions.canRead })
+        .from(accessPermissions)
+        .where(
+          and(
+            eq(accessPermissions.userId, auth.session.userId),
+            eq(accessPermissions.datasetId, datasetId!),
+            eq(accessPermissions.canRead, true)
+          )
+        )
+        .limit(1);
 
-  if (permission.length === 0) {
-    return NextResponse.json(
-      {
-        success: false,
-        message: "You do not have access to this dataset.",
-      },
-      { status: 403 }
-    );
-  }
-}
+      if (permission.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "You do not have access to this dataset.",
+          },
+          { status: 403 }
+        );
+      }
+    }
 
+    // Validate pagination
     if (
       !Number.isInteger(page) ||
       page < 1 ||
@@ -115,26 +152,81 @@ if (auth.session.role !== "ADMIN") {
       pageSize > 100
     ) {
       return NextResponse.json(
-        { success: false, message: "Invalid pagination parameters." },
+        {
+          success: false,
+          message: "Invalid pagination parameters.",
+        },
         { status: 400 }
       );
     }
 
-    if (!sortableFields[sortBy]) {
-      return NextResponse.json(
-        { success: false, message: "Invalid sort field." },
-        { status: 400 }
-      );
+    // Resolve sorting configuration
+    let sorting: z.infer<typeof multiSortSchema>;
+
+    if (rawSorting) {
+      let parsedSorting: unknown;
+
+      try {
+        parsedSorting = JSON.parse(rawSorting);
+      } catch {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid sorting JSON.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const validation = multiSortSchema.safeParse(parsedSorting);
+
+      if (!validation.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid sorting configuration.",
+            errors: validation.error.issues,
+          },
+          { status: 400 }
+        );
+      }
+
+      sorting = validation.data;
+    } else {
+      // Backward compatibility with existing single-column sorting
+      if (!sortableFields[legacySortBy]) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid sort field.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!["asc", "desc"].includes(legacySortOrder)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid sort order.",
+          },
+          { status: 400 }
+        );
+      }
+
+      sorting = [
+  {
+    field: legacySortBy as z.infer<typeof multiSortSchema>[number]["field"],
+    direction: legacySortOrder as "asc" | "desc",
+  },
+];
     }
 
-    if (!["asc", "desc"].includes(sortOrder)) {
-      return NextResponse.json(
-        { success: false, message: "Invalid sort order." },
-        { status: 400 }
-      );
-    }
+    // Primary sorting values for backward compatibility
+    const sortBy = sorting[0].field;
+    const sortOrder = sorting[0].direction;
 
-    // Parse optional filters.
+    // Parse optional filters
     let filters: z.infer<typeof filterSchema> = [];
 
     const rawFilters = params.get("filters");
@@ -146,7 +238,10 @@ if (auth.session.role !== "ADMIN") {
         parsedFilters = JSON.parse(rawFilters);
       } catch {
         return NextResponse.json(
-          { success: false, message: "Invalid filters JSON." },
+          {
+            success: false,
+            message: "Invalid filters JSON.",
+          },
           { status: 400 }
         );
       }
@@ -167,18 +262,19 @@ if (auth.session.role !== "ADMIN") {
       filters = validation.data;
     }
 
+    // Build database conditions
     const conditions: SQLWrapper[] = [
       eq(datasetRecords.datasetId, datasetId!),
     ];
 
-    // Global text search.
+    // Global text search
     if (search) {
       conditions.push(
         ilike(datasetRecords.searchableText, `%${search}%`)
       );
     }
 
-    // Dynamic field filters.
+    // Dynamic field filters
     for (const filter of filters) {
       const { field, operator, value } = filter;
 
@@ -186,8 +282,10 @@ if (auth.session.role !== "ADMIN") {
         if (
           !Array.isArray(value) ||
           value.length !== 2 ||
-          value.some((item) =>
-            !["string", "number"].includes(typeof item)
+          value.some(
+            (item) =>
+              typeof item !== "string" &&
+              typeof item !== "number"
           )
         ) {
           return NextResponse.json(
@@ -262,12 +360,18 @@ if (auth.session.role !== "ADMIN") {
           );
           break;
 
-        case "between":
+        case "between": {
+          const [minValue, maxValue] = value as [
+            string | number,
+            string | number
+          ];
+
           conditions.push(
-            sql`${fieldExpression} >= ${String((value as [string | number, string | number])[0])}
-                AND ${fieldExpression} <= ${String((value as [string | number, string | number])[1])}`
+            sql`${fieldExpression} >= ${String(minValue)}
+                AND ${fieldExpression} <= ${String(maxValue)}`
           );
           break;
+        }
       }
     }
 
@@ -275,7 +379,7 @@ if (auth.session.role !== "ADMIN") {
 
     const offset = (page - 1) * pageSize;
 
-    // Get total matching records.
+    // Get total matching records
     const [countResult] = await db
       .select({ total: count() })
       .from(datasetRecords)
@@ -283,7 +387,21 @@ if (auth.session.role !== "ADMIN") {
 
     const totalRecords = Number(countResult.total);
 
-    // Get only the requested page.
+    // Build multi-column ORDER BY clauses
+    const orderByClauses = sorting.map(({ field, direction }) => {
+      const column = sortableFields[field];
+
+      return direction === "asc"
+        ? asc(column)
+        : desc(column);
+    });
+
+    // Add stable tie-breaker if ID is not already part of sorting
+    if (!sorting.some((item) => item.field === "externalId")) {
+      orderByClauses.push(asc(datasetRecords.id));
+    }
+
+    // Get requested page
     const records = await db
       .select({
         id: datasetRecords.id,
@@ -294,11 +412,7 @@ if (auth.session.role !== "ADMIN") {
       })
       .from(datasetRecords)
       .where(whereClause)
-      .orderBy(
-        sortOrder === "asc"
-          ? asc(sortableFields[sortBy])
-          : desc(sortableFields[sortBy])
-      )
+      .orderBy(...orderByClauses)
       .limit(pageSize)
       .offset(offset);
 
@@ -318,6 +432,7 @@ if (auth.session.role !== "ADMIN") {
       sorting: {
         sortBy,
         sortOrder,
+        rules: sorting,
       },
     });
   } catch (error) {
@@ -332,5 +447,3 @@ if (auth.session.role !== "ADMIN") {
     );
   }
 }
-
-

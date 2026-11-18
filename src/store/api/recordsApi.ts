@@ -1,4 +1,5 @@
-﻿import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+﻿
+import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 export interface RecordFilter {
   field: string;
@@ -12,6 +13,11 @@ export interface RecordFilter {
     | "lte"
     | "between";
   value: string | number | [string | number, string | number];
+}
+
+export interface SortRule {
+  field: string;
+  direction: "asc" | "desc";
 }
 
 export interface DatasetRecord {
@@ -38,6 +44,7 @@ export interface RecordsResponse {
   sorting: {
     sortBy: string;
     sortOrder: "asc" | "desc";
+    rules?: SortRule[];
   };
 }
 
@@ -46,16 +53,24 @@ export interface GetRecordsArgs {
   page?: number;
   pageSize?: number;
   search?: string;
+
+  // Legacy single-column sorting
   sortBy?: string;
   sortOrder?: "asc" | "desc";
+
+  // New multi-column sorting
+  sorting?: SortRule[];
+
   filters?: RecordFilter[];
 }
 
 export const recordsApi = createApi({
   reducerPath: "recordsApi",
+
   baseQuery: fetchBaseQuery({
     baseUrl: "/api",
   }),
+
   tagTypes: ["Records"],
   keepUnusedDataFor: 60,
 
@@ -68,6 +83,7 @@ export const recordsApi = createApi({
         search = "",
         sortBy = "createdAt",
         sortOrder = "desc",
+        sorting,
         filters = [],
       }) => {
         const params = new URLSearchParams({
@@ -75,9 +91,16 @@ export const recordsApi = createApi({
           page: String(page),
           pageSize: String(pageSize),
           search,
-          sortBy,
-          sortOrder,
         });
+
+        // Prefer multi-column sorting when provided
+        if (sorting && sorting.length > 0) {
+          params.set("sorting", JSON.stringify(sorting));
+        } else {
+          // Backward compatibility
+          params.set("sortBy", sortBy);
+          params.set("sortOrder", sortOrder);
+        }
 
         if (filters.length > 0) {
           params.set("filters", JSON.stringify(filters));
