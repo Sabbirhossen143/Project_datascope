@@ -268,6 +268,7 @@ const [visibleColumns, setVisibleColumns] = useState<string[]>(
 const [columnsOpen, setColumnsOpen] = useState(false);
 const [columnsLoaded, setColumnsLoaded] = useState(false);
 const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
 useEffect(() => {
   try {
@@ -760,6 +761,12 @@ useEffect(() => {
   const somePageSelected =
   records.some((record) => selectedRecordIds.includes(record.id)) &&
   !allPageSelected;
+
+  useEffect(() => {
+  if (headerCheckboxRef.current) {
+    headerCheckboxRef.current.indeterminate = somePageSelected;
+  }
+}, [somePageSelected]);
 
   async function recordSearchHistory(
     queryValue: string = search,
@@ -1821,8 +1828,9 @@ useEffect(() => {
 <tr className="bg-[#F8F8F4]">
   <th className="w-12 px-4 py-4">
   <input
-    type="checkbox"
-    aria-label="Select all records on this page"
+  ref={headerCheckboxRef}
+  type="checkbox"
+  aria-label="Select all records on this page"
     checked={
       records.length > 0 &&
       records.every((record) =>
