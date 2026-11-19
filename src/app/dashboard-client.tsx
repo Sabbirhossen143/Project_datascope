@@ -753,6 +753,14 @@ useEffect(() => {
   const records = data?.data ?? [];
   const pagination = data?.pagination;
 
+  const allPageSelected =
+  records.length > 0 &&
+  records.every((record) => selectedRecordIds.includes(record.id));
+
+  const somePageSelected =
+  records.some((record) => selectedRecordIds.includes(record.id)) &&
+  !allPageSelected;
+
   async function recordSearchHistory(
     queryValue: string = search,
     filterValues: RecordFilter[] = filters
@@ -1311,6 +1319,23 @@ useEffect(() => {
                 <p className="mt-1.5 text-[11px] text-[#8B968E]">
                   Search, sort and refine records from your dataset.
                 </p>
+
+                {selectedRecordIds.length > 0 && (
+  <div className="mt-3 flex flex-wrap items-center gap-3">
+    <span className="inline-flex items-center rounded-lg bg-[#EAF1E9] px-3 py-2 text-[11px] font-semibold text-[#286347]">
+      {selectedRecordIds.length} records selected
+    </span>
+
+    <button
+      type="button"
+      onClick={() => setSelectedRecordIds([])}
+      className="text-[11px] font-semibold text-[#68776D] transition hover:text-[#AC5144]"
+    >
+      Clear selection
+    </button>
+  </div>
+)}
+
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -1794,6 +1819,34 @@ useEffect(() => {
                 <thead>
                   
 <tr className="bg-[#F8F8F4]">
+  <th className="w-12 px-4 py-4">
+  <input
+    type="checkbox"
+    aria-label="Select all records on this page"
+    checked={
+      records.length > 0 &&
+      records.every((record) =>
+        selectedRecordIds.includes(record.id)
+      )
+    }
+    onChange={(event) => {
+      if (event.target.checked) {
+        setSelectedRecordIds((prev) =>
+          Array.from(
+            new Set([...prev, ...records.map((record) => record.id)])
+          )
+        );
+      } else {
+        setSelectedRecordIds((prev) =>
+          prev.filter(
+            (id) => !records.some((record) => record.id === id)
+          )
+        );
+      }
+    }}
+    className="h-4 w-4 cursor-pointer accent-[#26745A]"
+  />
+</th>
   {[
     { label: "Transaction", field: "externalId" },
     { label: "Customer", field: "customerName" },
@@ -1898,11 +1951,31 @@ useEffect(() => {
                     </tr>
                   )}
 
-                  {records.map((record) => (
+  {records.map((record) => (
   <tr
     key={record.id}
     className="transition-colors hover:bg-[#F8FAF6]"
   >
+    <td className="w-12 px-4 py-4">
+  <input
+    type="checkbox"
+    aria-label={`Select transaction ${record.externalId}`}
+    checked={selectedRecordIds.includes(record.id)}
+    onChange={(event) => {
+      if (event.target.checked) {
+        setSelectedRecordIds((prev) =>
+          Array.from(new Set([...prev, record.id]))
+        );
+      } else {
+        setSelectedRecordIds((prev) =>
+          prev.filter((id) => id !== record.id)
+        );
+      }
+    }}
+    className="h-4 w-4 cursor-pointer accent-[#26745A]"
+  />
+</td>
+
     {visibleColumns.includes("externalId") && (
       <td className="whitespace-nowrap px-5 py-4 sm:px-6">
         <button
