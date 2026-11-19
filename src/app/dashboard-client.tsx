@@ -44,6 +44,7 @@ import {
   setPageSize,
   setSearch,
   setSorting,
+  toggleSort,
   setFilters,
   clearFilters,
   resetExplorer,
@@ -634,6 +635,7 @@ export default function DashboardClient() {
     search,
     sortBy,
     sortOrder,
+    sorting,
     filters,
   } = useAppSelector((state) => state.explorer);
 
@@ -692,6 +694,7 @@ export default function DashboardClient() {
     search,
     sortBy,
     sortOrder,
+    sorting,
     filters,
   }, { skip: authLoading || !currentUser || !datasetReady || !activeDatasetId });
 
@@ -1643,24 +1646,69 @@ export default function DashboardClient() {
 
               <table className="w-full min-w-[920px] border-collapse text-left">
                 <thead>
-                  <tr className="bg-[#F8F8F4]">
-                    {[
-                      "Transaction",
-                      "Customer",
-                      "Product",
-                      "Region",
-                      "Amount",
-                      "Status",
-                      "Payment",
-                    ].map((heading) => (
-                      <th
-                        key={heading}
-                        className="whitespace-nowrap px-5 py-4 text-[9px] font-bold uppercase tracking-[1.1px] text-[#849087] sm:px-6"
-                      >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
+                  
+<tr className="bg-[#F8F8F4]">
+  {[
+    { label: "Transaction", field: "externalId" },
+    { label: "Customer", field: "customerName" },
+    { label: "Product", field: "product" },
+    { label: "Region", field: "region" },
+    { label: "Amount", field: "amount" },
+    { label: "Status", field: "status" },
+    { label: "Payment", field: "paymentMethod" },
+  ].map(({ label, field }) => {
+    const sortIndex = sorting.findIndex(
+      (rule) => rule.field === field
+    );
+
+    const activeRule =
+      sortIndex >= 0 ? sorting[sortIndex] : null;
+
+    return (
+      <th
+        key={field}
+        aria-sort={
+          sortIndex === 0
+            ? activeRule?.direction === "asc"
+              ? "ascending"
+              : "descending"
+            : "none"
+        }
+        className="whitespace-nowrap px-5 py-4 text-[9px] font-bold uppercase tracking-[1.1px] text-[#849087] sm:px-6"
+      >
+        <button
+          type="button"
+          onClick={(event) =>
+            dispatch(
+              toggleSort({
+                field,
+                shiftKey: event.shiftKey,
+              })
+            )
+          }
+          title={
+            activeRule
+              ? `${label}: ${activeRule.direction.toUpperCase()} — Shift + Click to add or change sorting`
+              : `Click to sort by ${label}. Shift + Click to add another sorting rule.`
+          }
+          className="inline-flex items-center gap-2 rounded-md transition hover:text-[#246448] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#39845A]"
+        >
+          <span>{label}</span>
+
+          {activeRule && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-[#E6EFE6] px-1.5 py-1 text-[9px] font-bold text-[#286347]">
+              <span>
+                {activeRule.direction === "asc" ? "↑" : "↓"}
+              </span>
+              <span>{sortIndex + 1}</span>
+            </span>
+          )}
+        </button>
+      </th>
+    );
+  })}
+</tr>
+
                 </thead>
 
                 <tbody className="divide-y divide-[#F0F0EA]">

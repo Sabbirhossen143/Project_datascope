@@ -57,6 +57,7 @@ const sortableFields: Record<string, SQLWrapper> = {
   status: sql`${datasetRecords.data} ->> 'status'`,
   region: sql`${datasetRecords.data} ->> 'region'`,
   orderDate: sql`${datasetRecords.data} ->> 'orderDate'`,
+  paymentMethod: sql`${datasetRecords.data} ->> 'paymentMethod'`,
 };
 
 // Multi-column sorting validation
