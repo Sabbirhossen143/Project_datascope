@@ -250,6 +250,58 @@ export default function DashboardClient() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  const DEFAULT_VISIBLE_COLUMNS = [
+  "externalId",
+  "customerName",
+  "product",
+  "region",
+  "amount",
+  "status",
+  "paymentMethod",
+];
+
+const COLUMN_STORAGE_KEY = "datascope-visible-columns";
+
+const [visibleColumns, setVisibleColumns] = useState<string[]>(
+  DEFAULT_VISIBLE_COLUMNS
+);
+const [columnsOpen, setColumnsOpen] = useState(false);
+const [columnsLoaded, setColumnsLoaded] = useState(false);
+const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+
+useEffect(() => {
+  try {
+    const savedColumns = localStorage.getItem(COLUMN_STORAGE_KEY);
+
+    if (savedColumns) {
+      const parsedColumns = JSON.parse(savedColumns);
+
+      if (
+        Array.isArray(parsedColumns) &&
+        parsedColumns.length > 0 &&
+        parsedColumns.every((column) =>
+          DEFAULT_VISIBLE_COLUMNS.includes(column)
+        )
+      ) {
+        setVisibleColumns(parsedColumns);
+      }
+    }
+  } catch {
+    // Ignore invalid stored column preferences
+  } finally {
+    setColumnsLoaded(true);
+  }
+}, []);
+
+useEffect(() => {
+  if (!columnsLoaded) return;
+
+  localStorage.setItem(
+    COLUMN_STORAGE_KEY,
+    JSON.stringify(visibleColumns)
+  );
+}, [visibleColumns, columnsLoaded]);
+
   useEffect(() => {
     let active = true;
     dispatch(setAuthLoading(true));
@@ -1450,25 +1502,119 @@ export default function DashboardClient() {
                   Reset all
                 </button>
 
-                <button
-                  ref={filterTriggerRef}
-                  onClick={() => setFilterOpen(!filterOpen)}
-                  aria-expanded={filterOpen}
-                  aria-haspopup="dialog"
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold transition ${
-                    filterOpen
-                      ? "bg-[#183C30] text-white"
-                      : "bg-[#EAF1E9] text-[#286347] hover:bg-[#DDEADD]"
-                  }`}
-                >
-                  <Filter size={14} />
-                  Filters
-                  {filters.length > 0 && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D7B77A] px-1 text-[9px] text-[#183C30]">
-                      {filters.length}
-                    </span>
-                  )}
-                </button>
+                <div className="relative">
+  <button
+    type="button"
+    onClick={() => setColumnsOpen((open) => !open)}
+    aria-expanded={columnsOpen}
+    className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-semibold transition ${
+      columnsOpen
+        ? "border-[#BFCFBE] bg-[#EDF3EC] text-[#286347]"
+        : "border-[#E7E8E2] bg-white text-[#68776D] hover:border-[#B8C9BA] hover:bg-[#F7F8F4]"
+    }`}
+  >
+    <SlidersHorizontal size={14} />
+    Columns
+    <span className="rounded-md bg-[#E9EDE5] px-1.5 py-0.5 text-[9px]">
+      {visibleColumns.length}
+    </span>
+    <ChevronDown size={13} className={columnsOpen ? "rotate-180" : ""} />
+  </button>
+
+  {columnsOpen && (
+    <>
+      <button
+        type="button"
+        aria-label="Close column settings"
+        className="fixed inset-0 z-40 cursor-default"
+        onClick={() => setColumnsOpen(false)}
+      />
+
+      <div className="absolute right-0 top-[calc(100%+9px)] z-50 w-64 overflow-hidden rounded-2xl border border-[#E5E8DF] bg-white p-4 shadow-[0_18px_48px_rgba(20,47,40,0.17)]">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-[#263B32]">
+              Visible columns
+            </p>
+            <p className="mt-1 text-[10px] text-[#8A968D]">
+              Customize your table
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setVisibleColumns(DEFAULT_VISIBLE_COLUMNS)}
+            className="text-[10px] font-semibold text-[#39704E] hover:underline"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {[
+            { label: "Transaction", field: "externalId" },
+            { label: "Customer", field: "customerName" },
+            { label: "Product", field: "product" },
+            { label: "Region", field: "region" },
+            { label: "Amount", field: "amount" },
+            { label: "Status", field: "status" },
+            { label: "Payment", field: "paymentMethod" },
+          ].map(({ label, field }) => (
+            <label
+              key={field}
+              className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-[11px] text-[#52685A] transition hover:bg-[#F5F7F2]"
+            >
+              <input
+                type="checkbox"
+                checked={visibleColumns.includes(field)}
+                onChange={(event) => {
+                  if (event.target.checked) {
+                    setVisibleColumns((prev) => [...prev, field]);
+                  } else {
+                    if (visibleColumns.length <= 1) return;
+                    setVisibleColumns((prev) =>
+                      prev.filter((column) => column !== field)
+                    );
+                  }
+                }}
+                className="h-3.5 w-3.5 accent-[#26745A]"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setColumnsOpen(false)}
+          className="mt-3 w-full rounded-lg bg-[#1E6048] py-2.5 text-[10px] font-semibold text-white transition hover:bg-[#174B38]"
+        >
+          Done
+        </button>
+      </div>
+    </>
+  )}
+</div>
+
+<button
+  ref={filterTriggerRef}
+  onClick={() => setFilterOpen(!filterOpen)}
+  aria-expanded={filterOpen}
+  aria-haspopup="dialog"
+  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[11px] font-semibold transition ${
+    filterOpen
+      ? "bg-[#183C30] text-white"
+      : "bg-[#EAF1E9] text-[#286347] hover:bg-[#DDEADD]"
+  }`}
+>
+  <Filter size={14} />
+  Filters
+  {filters.length > 0 && (
+    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#D7B77A] px-1 text-[9px] text-[#183C30]">
+      {filters.length}
+    </span>
+  )}
+</button>
               </div>
             </div>
 
@@ -1656,57 +1802,59 @@ export default function DashboardClient() {
     { label: "Amount", field: "amount" },
     { label: "Status", field: "status" },
     { label: "Payment", field: "paymentMethod" },
-  ].map(({ label, field }) => {
-    const sortIndex = sorting.findIndex(
-      (rule) => rule.field === field
-    );
+  ]
+    .filter(({ field }) => visibleColumns.includes(field))
+    .map(({ label, field }) => {
+      const sortIndex = sorting.findIndex(
+        (rule) => rule.field === field
+      );
 
-    const activeRule =
-      sortIndex >= 0 ? sorting[sortIndex] : null;
+      const activeRule =
+        sortIndex >= 0 ? sorting[sortIndex] : null;
 
-    return (
-      <th
-        key={field}
-        aria-sort={
-          sortIndex === 0
-            ? activeRule?.direction === "asc"
-              ? "ascending"
-              : "descending"
-            : "none"
-        }
-        className="whitespace-nowrap px-5 py-4 text-[9px] font-bold uppercase tracking-[1.1px] text-[#849087] sm:px-6"
-      >
-        <button
-          type="button"
-          onClick={(event) =>
-            dispatch(
-              toggleSort({
-                field,
-                shiftKey: event.shiftKey,
-              })
-            )
+      return (
+        <th
+          key={field}
+          aria-sort={
+            sortIndex === 0
+              ? activeRule?.direction === "asc"
+                ? "ascending"
+                : "descending"
+              : "none"
           }
-          title={
-            activeRule
-              ? `${label}: ${activeRule.direction.toUpperCase()} — Shift + Click to add or change sorting`
-              : `Click to sort by ${label}. Shift + Click to add another sorting rule.`
-          }
-          className="inline-flex items-center gap-2 rounded-md transition hover:text-[#246448] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#39845A]"
+          className="whitespace-nowrap px-5 py-4 text-[9px] font-bold uppercase tracking-[1.1px] text-[#849087] sm:px-6"
         >
-          <span>{label}</span>
+          <button
+            type="button"
+            onClick={(event) =>
+              dispatch(
+                toggleSort({
+                  field,
+                  shiftKey: event.shiftKey,
+                })
+              )
+            }
+            title={
+              activeRule
+                ? `${label}: ${activeRule.direction.toUpperCase()} — Shift + Click to add or change sorting`
+                : `Click to sort by ${label}. Shift + Click to add another sorting rule.`
+            }
+            className="inline-flex items-center gap-2 rounded-md transition hover:text-[#246448] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#39845A]"
+          >
+            <span>{label}</span>
 
-          {activeRule && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-[#E6EFE6] px-1.5 py-1 text-[9px] font-bold text-[#286347]">
-              <span>
-                {activeRule.direction === "asc" ? "↑" : "↓"}
+            {activeRule && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-[#E6EFE6] px-1.5 py-1 text-[9px] font-bold text-[#286347]">
+                <span>
+                  {activeRule.direction === "asc" ? "↑" : "↓"}
+                </span>
+                <span>{sortIndex + 1}</span>
               </span>
-              <span>{sortIndex + 1}</span>
-            </span>
-          )}
-        </button>
-      </th>
-    );
-  })}
+            )}
+          </button>
+        </th>
+      );
+    })}
 </tr>
 
                 </thead>
@@ -1738,7 +1886,7 @@ export default function DashboardClient() {
 
                   {!isLoading && !isError && records.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-20 text-center">
+                      <td colSpan={visibleColumns.length} className="px-6 py-20 text-center">
                         <Search className="mx-auto text-[#A5B0A6]" size={25} />
                         <p className="mt-3 text-sm font-semibold text-[#53685A]">
                           No matching records
@@ -1751,61 +1899,77 @@ export default function DashboardClient() {
                   )}
 
                   {records.map((record) => (
-                    <tr
-                      key={record.id}
-                      className="transition-colors hover:bg-[#F8FAF6]"
-                    >
-                      <td className="whitespace-nowrap px-5 py-4 sm:px-6">
-                        <button
-                          type="button"
-                          onClick={() => {
-  const url = `/records/${encodeURIComponent(record.id)}?datasetId=${encodeURIComponent(activeDatasetId ?? "")}`;
-  router.push(url);
-}}
-                          aria-label={`View details for transaction ${record.externalId}`}
-                          className="group text-left"
-                        >
-                          <span className="block text-[11px] font-bold text-[#347253] transition group-hover:text-[#183C30] group-hover:underline group-hover:underline-offset-4">
-                            {record.externalId}
-                          </span>
-                          <span className="mt-1 block text-[9px] font-medium text-[#9AA49B] opacity-0 transition group-hover:opacity-100">
-                            View record details →
-                          </span>
-                        </button>
-                      </td>
+  <tr
+    key={record.id}
+    className="transition-colors hover:bg-[#F8FAF6]"
+  >
+    {visibleColumns.includes("externalId") && (
+      <td className="whitespace-nowrap px-5 py-4 sm:px-6">
+        <button
+          type="button"
+          onClick={() => {
+            const url = `/records/${encodeURIComponent(record.id)}?datasetId=${encodeURIComponent(activeDatasetId ?? "")}`;
+            router.push(url);
+          }}
+          aria-label={`View details for transaction ${record.externalId}`}
+          className="group text-left"
+        >
+          <span className="block text-[11px] font-bold text-[#347253] transition group-hover:text-[#183C30] group-hover:underline group-hover:underline-offset-4">
+            {record.externalId}
+          </span>
+          <span className="mt-1 block text-[9px] font-medium text-[#9AA49B] opacity-0 transition group-hover:opacity-100">
+            View record details →
+          </span>
+        </button>
+      </td>
+    )}
 
-                      <td className="px-5 py-4 sm:px-6">
-                        <p className="whitespace-nowrap text-xs font-semibold text-[#344A3B]">
-                          {displayValue(record.data.customerName)}
-                        </p>
-                        <p className="mt-1 text-[10px] text-[#9AA49B]">
-                          {displayValue(record.data.email)}
-                        </p>
-                      </td>
+    {visibleColumns.includes("customerName") && (
+      <td className="px-5 py-4 sm:px-6">
+        <p className="whitespace-nowrap text-xs font-semibold text-[#344A3B]">
+          {displayValue(record.data.customerName)}
+        </p>
+        <p className="mt-1 text-[10px] text-[#9AA49B]">
+          {displayValue(record.data.email)}
+        </p>
+      </td>
+    )}
 
-                      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
-                        {displayValue(record.data.product)}
-                      </td>
+    {visibleColumns.includes("product") && (
+      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
+        {displayValue(record.data.product)}
+      </td>
+    )}
 
-                      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
-                        {displayValue(record.data.region)}
-                      </td>
+    {visibleColumns.includes("region") && (
+      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
+        {displayValue(record.data.region)}
+      </td>
+    )}
 
-                      <td className="whitespace-nowrap px-5 py-4 text-xs font-bold text-[#344A3B] sm:px-6">
-                        {formatAmount(record.data.amount)}
-                      </td>
+    {visibleColumns.includes("amount") && (
+      <td className="whitespace-nowrap px-5 py-4 text-xs font-bold text-[#344A3B] sm:px-6">
+        {formatAmount(record.data.amount)}
+      </td>
+    )}
 
-                      <td className="whitespace-nowrap px-5 py-4 sm:px-6">
-                        <span className={`inline-flex rounded-full px-2.5 py-1.5 text-[9px] font-bold ${getStatusStyle(record.data.status)}`}>
-                          {displayValue(record.data.status)}
-                        </span>
-                      </td>
+    {visibleColumns.includes("status") && (
+      <td className="whitespace-nowrap px-5 py-4 sm:px-6">
+        <span
+          className={`inline-flex rounded-full px-2.5 py-1.5 text-[9px] font-bold ${getStatusStyle(record.data.status)}`}
+        >
+          {displayValue(record.data.status)}
+        </span>
+      </td>
+    )}
 
-                      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
-                        {displayValue(record.data.paymentMethod)}
-                      </td>
-                    </tr>
-                  ))}
+    {visibleColumns.includes("paymentMethod") && (
+      <td className="whitespace-nowrap px-5 py-4 text-xs text-[#65766A] sm:px-6">
+        {displayValue(record.data.paymentMethod)}
+      </td>
+    )}
+  </tr>
+))}
                 </tbody>
               </table>
             </div>
