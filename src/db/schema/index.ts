@@ -118,3 +118,41 @@ export const accessPermissions = pgTable("access_permissions", {
   canExport: boolean("can_export").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const auditActionEnum = pgEnum("audit_action", [
+  "CREATE",
+  "UPDATE",
+  "DELETE",
+  "BULK_DELETE",
+]);
+
+export const activityLogs = pgTable(
+  "activity_logs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    datasetId: uuid("dataset_id").references(() => datasets.id, {
+      onDelete: "set null",
+    }),
+
+    recordId: uuid("record_id"),
+
+    externalId: varchar("external_id", { length: 100 }),
+
+    action: auditActionEnum("action").notNull(),
+
+    details: jsonb("details").$type<Record<string, unknown>>(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("activity_logs_user_idx").on(table.userId),
+    index("activity_logs_dataset_idx").on(table.datasetId),
+    index("activity_logs_record_idx").on(table.recordId),
+    index("activity_logs_created_idx").on(table.createdAt),
+  ]
+);

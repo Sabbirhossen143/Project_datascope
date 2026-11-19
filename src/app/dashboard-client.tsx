@@ -268,7 +268,12 @@ const [visibleColumns, setVisibleColumns] = useState<string[]>(
 const [columnsOpen, setColumnsOpen] = useState(false);
 const [columnsLoaded, setColumnsLoaded] = useState(false);
 const [selectedRecordIds, setSelectedRecordIds] = useState<string[]>([]);
+const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+const [deleteLoading, setDeleteLoading] = useState(false);
 const headerCheckboxRef = useRef<HTMLInputElement>(null);
+const [selectedRecordData, setSelectedRecordData] = useState<
+  Record<string, Record<string, unknown>>
+>({});
 
 useEffect(() => {
   try {
@@ -554,6 +559,116 @@ useEffect(() => {
       setExportLoading(false);
     }
   }
+
+  function handleExportSelectedCsv() {
+  if (selectedRecordIds.length === 0) {
+    toast.error("No records selected");
+    return;
+  }
+
+  const selectedData = selectedRecordIds
+    .map((id) => selectedRecordData[id])
+    .filter(Boolean);
+
+  if (selectedData.length === 0) {
+    toast.error("Selected record data unavailable");
+    return;
+  }
+
+  const headers = Array.from(
+    new Set(selectedData.flatMap((record) => Object.keys(record)))
+  );
+
+  const csvRows = [
+    headers.map((header) => `"${header.replace(/"/g, '""')}"`).join(","),
+    ...selectedData.map((record) =>
+      headers
+        .map((header) => {
+          const value = record[header];
+          const cell = value == null ? "" : String(value);
+          return `"${cell.replace(/"/g, '""')}"`;
+        })
+        .join(",")
+    ),
+  ];
+
+  const csvContent = "\uFEFF" + csvRows.join("\r\n");
+  const blob = new Blob([csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = "datascope-selected-records.csv";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(objectUrl);
+
+  toast.success(`${selectedData.length} records exported successfully`);
+}
+
+async function handleBulkDelete() {
+  if (!activeDatasetId || selectedRecordIds.length === 0) {
+    toast.error("No records selected");
+    return;
+  }
+
+  if (selectedRecordIds.length > 500) {
+    toast.error("Maximum 500 records can be deleted at once");
+    return;
+  }
+
+  if (currentUser?.role !== "ADMIN") {
+    toast.error("Delete access denied", {
+      description: "Only administrators can delete records.",
+    });
+    return;
+  }
+
+  const toastId = toast.loading("Deleting selected records...");
+  setDeleteLoading(true);
+
+  try {
+    const response = await fetch("/api/records/bulk-delete", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        datasetId: activeDatasetId,
+        recordIds: selectedRecordIds,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message ?? "Unable to delete selected records.");
+    }
+
+    setSelectedRecordIds([]);
+    setSelectedRecordData({});
+
+    await refetch();
+
+        setDeleteModalOpen(false);
+
+    toast.success(result.message ?? "Selected records deleted successfully.", {
+      id: toastId,
+      duration: 3000,
+    });
+    } catch (error) {
+    toast.error("Bulk delete failed", {
+      id: toastId,
+      description: error instanceof Error ? error.message : "Please try again.",
+      duration: 4000,
+    });
+  } finally {
+    setDeleteLoading(false);
+  }
+}
 
   function getCurrentViewConfiguration() {
     return {
@@ -1328,18 +1443,49 @@ useEffect(() => {
                 </p>
 
                 {selectedRecordIds.length > 0 && (
-  <div className="mt-3 flex flex-wrap items-center gap-3">
-    <span className="inline-flex items-center rounded-lg bg-[#EAF1E9] px-3 py-2 text-[11px] font-semibold text-[#286347]">
+  <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-xl border border-[#E5EAE2] bg-[#F8FAF6] p-3">
+
+    {/* Selection Count */}
+    <span className="inline-flex items-center gap-2 rounded-lg bg-[#EAF1E9] px-3 py-2 text-[11px] font-semibold text-[#286347]">
+      <Check size={13} />
       {selectedRecordIds.length} records selected
     </span>
 
+    {/* Export Selected */}
     <button
       type="button"
-      onClick={() => setSelectedRecordIds([])}
-      className="text-[11px] font-semibold text-[#68776D] transition hover:text-[#AC5144]"
+      onClick={handleExportSelectedCsv}
+      className="inline-flex items-center gap-2 rounded-lg bg-[#286347] px-3.5 py-2 text-[11px] font-semibold text-white transition hover:bg-[#1F5039]"
     >
+      <Download size={13} />
+      Export Selected CSV
+    </button>
+
+    {/* Bulk Delete - ADMIN only */}
+    {currentUser?.role === "ADMIN" && (
+      <button
+        type="button"
+        onClick={() => setDeleteModalOpen(true)}
+        className="inline-flex items-center gap-2 rounded-lg bg-[#AC5144] px-3.5 py-2 text-[11px] font-semibold text-white transition hover:bg-[#923F34]"
+      >
+        <Trash2 size={13} />
+        Delete Selected
+      </button>
+    )}
+
+    {/* Clear Selection */}
+    <button
+      type="button"
+      onClick={() => {
+        setSelectedRecordIds([]);
+        setSelectedRecordData({});
+      }}
+      className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold text-[#68776D] transition hover:bg-[#F0EAE7] hover:text-[#AC5144]"
+    >
+      <X size={13} />
       Clear selection
     </button>
+
   </div>
 )}
 
@@ -1838,20 +1984,40 @@ useEffect(() => {
       )
     }
     onChange={(event) => {
-      if (event.target.checked) {
-        setSelectedRecordIds((prev) =>
-          Array.from(
-            new Set([...prev, ...records.map((record) => record.id)])
-          )
-        );
-      } else {
-        setSelectedRecordIds((prev) =>
-          prev.filter(
-            (id) => !records.some((record) => record.id === id)
-          )
-        );
-      }
-    }}
+  if (event.target.checked) {
+    setSelectedRecordIds((prev) =>
+      Array.from(
+        new Set([...prev, ...records.map((record) => record.id)])
+      )
+    );
+
+    setSelectedRecordData((prev) => {
+      const updated = { ...prev };
+
+      records.forEach((record) => {
+        updated[record.id] = record.data;
+      });
+
+      return updated;
+    });
+  } else {
+    setSelectedRecordIds((prev) =>
+      prev.filter(
+        (id) => !records.some((record) => record.id === id)
+      )
+    );
+
+    setSelectedRecordData((prev) => {
+      const updated = { ...prev };
+
+      records.forEach((record) => {
+        delete updated[record.id];
+      });
+
+      return updated;
+    });
+  }
+}}
     className="h-4 w-4 cursor-pointer accent-[#26745A]"
   />
 </th>
@@ -1970,16 +2136,27 @@ useEffect(() => {
     aria-label={`Select transaction ${record.externalId}`}
     checked={selectedRecordIds.includes(record.id)}
     onChange={(event) => {
-      if (event.target.checked) {
-        setSelectedRecordIds((prev) =>
-          Array.from(new Set([...prev, record.id]))
-        );
-      } else {
-        setSelectedRecordIds((prev) =>
-          prev.filter((id) => id !== record.id)
-        );
-      }
-    }}
+  if (event.target.checked) {
+    setSelectedRecordIds((prev) =>
+      Array.from(new Set([...prev, record.id]))
+    );
+
+    setSelectedRecordData((prev) => ({
+      ...prev,
+      [record.id]: record.data,
+    }));
+  } else {
+    setSelectedRecordIds((prev) =>
+      prev.filter((id) => id !== record.id)
+    );
+
+    setSelectedRecordData((prev) => {
+      const updated = { ...prev };
+      delete updated[record.id];
+      return updated;
+    });
+  }
+}}
     className="h-4 w-4 cursor-pointer accent-[#26745A]"
   />
 </td>
@@ -2134,6 +2311,69 @@ useEffect(() => {
           </footer>
         </div>
       </main>
+
+      {deleteModalOpen && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#142F28]/45 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-md overflow-hidden rounded-2xl border border-[#E8E7DF] bg-white shadow-2xl">
+
+      <div className="p-6">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#FBEDEA] text-[#AC5144]">
+          <Trash2 size={22} />
+        </div>
+
+        <h3 className="mt-4 text-lg font-bold text-[#263B32]">
+          Delete selected records?
+        </h3>
+
+        <p className="mt-2 text-sm leading-6 text-[#78867D]">
+          You are about to permanently delete{" "}
+          <span className="font-bold text-[#AC5144]">
+            {selectedRecordIds.length.toLocaleString()} records
+          </span>{" "}
+          from this dataset. This action cannot be undone.
+        </p>
+
+        <div className="mt-4 rounded-xl border border-[#F0DCD6] bg-[#FCF6F4] p-3">
+          <div className="flex items-start gap-2">
+            <CircleHelp size={16} className="mt-0.5 shrink-0 text-[#AC5144]" />
+            <p className="text-[11px] leading-5 text-[#91574E]">
+              Deleted records will no longer be available in DataScope.
+              Please confirm carefully before proceeding.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col-reverse gap-2 border-t border-[#EFEFE9] bg-[#FAFAF7] p-4 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          disabled={deleteLoading}
+          onClick={() => setDeleteModalOpen(false)}
+          className="rounded-xl border border-[#E7E8E2] bg-white px-4 py-2.5 text-xs font-semibold text-[#68776D] transition hover:bg-[#F4F6F1] disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          disabled={deleteLoading}
+          onClick={handleBulkDelete}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#AC5144] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#923F34] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {deleteLoading ? (
+            <RefreshCw size={14} className="animate-spin" />
+          ) : (
+            <Trash2 size={14} />
+          )}
+
+          {deleteLoading ? "Deleting..." : "Delete Records"}
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
+
     </div>
   );
 }
